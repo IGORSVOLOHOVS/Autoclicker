@@ -1,3 +1,10 @@
 autoclicker.exe
 last_config.json
 .env
+
+# Release bundle built by hand: it is autoclicker.exe (53 MB, already ignored
+# on the line above) zipped up with the sources beside it. Git stores it as one
+# opaque blob that changes wholesale on every build, and GitHub warns past 50 MB
+# and refuses past 100. A built archive belongs on the Releases page, not in
+# the history.
+autoclicker.zip
