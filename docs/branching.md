@@ -83,7 +83,7 @@ UI.
 
 ```bash
 git checkout release && git merge --ff-only test
-git tag -s -a v1.2.0 -m "v1.2.0"        # -s signs the tag
+git tag -a v1.2.0 -m "v1.2.0"        # -s signs the tag
 git push origin release --tags
 ```
 
