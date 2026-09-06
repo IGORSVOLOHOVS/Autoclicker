@@ -133,7 +133,7 @@ like work, it is counted as work, and nobody is sure.
 git switch test && git merge --ff-only dev && git push
 # manual checks on test
 git switch release && git merge --ff-only test
-git tag -s -a v1.2.0 -m "v1.2.0"        # -s signs it
+git tag -a v1.2.0 -m "v1.2.0"           # -s to sign, once a key exists
 git push origin release --tags
 ```
 

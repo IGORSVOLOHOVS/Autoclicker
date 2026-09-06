@@ -64,7 +64,11 @@ program with one maintainer. The release carries a SHA-256 per artefact and a
 CycloneDX SBOM, so what shipped can be identified even though its author cannot
 be cryptographically proven.
 
-Tags are signed - `git tag -s` - which covers the source.
+Nothing else is signed either. An earlier draft of this file claimed the tags
+were, which was not true - there is no key on the machine that cuts releases,
+and `git tag -s` fails there. Tags are annotated. That is open work, listed
+below, and not a decision: a document of honest divergences containing a false
+one is worth less than no document.
 
 **Worth knowing:** a program that moves the mouse and installs a keyboard hook
 looks, to an antivirus, exactly like something unpleasant. Signing would help
@@ -116,6 +120,9 @@ version field and a migration, in one go.
 Open work, kept separate on purpose - a list of "we chose this" that quietly
 absorbs "we did not get to it" stops being useful:
 
+- **No signing key.** Tags are annotated, not signed, and the binary is not
+  signed either. A GPG key for the tags costs nothing but a decision about
+  where the key lives.
 - **Release notes do not name fixed vulnerabilities** - OpenSSF
   `release_notes_vulns`. There have been none, which is not the same as having
   a practice.
