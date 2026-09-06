@@ -18,6 +18,20 @@
 
 -----
 
+## 🖼 Как это выглядит
+
+| Окно при запуске | С загруженным пресетом |
+| --- | --- |
+| ![Окно программы](docs/screenshots/main-window.png) | ![Загруженный пресет](docs/screenshots/preset-loaded.png) |
+
+Скриншоты не сняты руками, а собираются из самой программы:
+
+```bash
+python scripts/capture_usage_screenshots.py
+```
+
+-----
+
 ## ⚙️ Установка (Installation)
 
 Для работы приложения требуется **Python 3.x**.

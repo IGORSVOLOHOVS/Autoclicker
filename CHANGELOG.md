@@ -34,6 +34,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - CI on Ubuntu and Windows, Python 3.10 and 3.12: ruff, format, strict mypy,
   tests, coverage gate, gitleaks over full history, ISO 25010 metrics.
 - Issue and pull-request templates, `CODEOWNERS`, Dependabot, SBOM per release.
+- README screenshots, regenerated from the program itself by
+  `scripts/capture_usage_screenshots.py` rather than taken by hand.
 - `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`.
 - `docs/architecture.md`, `docs/quality-iso25010.md`, `docs/decisions.md`,
   `docs/workflow.md`, `docs/branching.md`.
