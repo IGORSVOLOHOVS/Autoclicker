@@ -31,6 +31,23 @@ more than one `gh issue view` away.
 A work branch is deleted when its pull request merges. `enforce_branch_policy.py`
 names any whose tip is already merged; leaving one is how the graveyard starts.
 
+## Branches a bot opened
+
+A fifth class, and it exists because two rules of this standard contradicted
+each other here in practice. Point 21 asks for something that watches the
+dependencies; point 14 asks every branch to carry an issue number. Dependabot
+cannot open an issue first and cannot name its branch after one - so the day it
+was switched on it opened ten pull requests and turned every check in this
+repository red, including changes with nothing to do with dependencies.
+
+```toml
+[tool.repo-quality]
+bot_branch_prefixes = ["dependabot/", "renovate/"]
+```
+
+Configured rather than hard-coded, and opt-in: a repository that has not
+switched a bot on still rejects a branch pretending to be one.
+
 ## Why only three long-lived ones
 
 Long-lived feature branches are where work goes to be forgotten. The audit of

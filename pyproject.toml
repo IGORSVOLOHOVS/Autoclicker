@@ -74,6 +74,11 @@ quote-style = "double"
 [tool.repo-quality]
 code = "acl"
 long_lived_branches = ["release", "dev", "test"]
+# A bot cannot open an issue first and cannot name its branch after one. Point
+# 21 asks for a bot that watches the dependencies; point 14 asks every branch
+# to carry an issue number. Without this list the two rules contradict each
+# other and every pull request in the repository goes red.
+bot_branch_prefixes = ["dependabot/", "renovate/"]
 branch_types = [
     "feat", "fix", "docs", "test", "refactor",
     "perf", "build", "ci", "chore", "security",

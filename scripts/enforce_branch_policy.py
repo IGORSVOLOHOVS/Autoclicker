@@ -7,10 +7,16 @@ outlives a pull request.
 
 The rule used to be "three branches, never a fourth", which made a pull request
 impossible: a pull request needs a branch on the remote to point at. So a
-fourth kind of branch is allowed, and only that kind - a work branch named
+fourth kind of branch is allowed - a work branch named
 ``<code>-<issue>/<type>/<slug>``, carrying an issue number, deleted when its
 pull request merges. The grammar comes from ``[tool.repo-quality]`` in
 pyproject.toml, the same place the commit checker reads.
+
+There is a fifth: branches a bot opened. Dependabot cannot open an issue first
+and cannot name its branch after one, so point 21 - something must watch the
+dependencies - and point 14 contradicted each other until this existed. The
+prefixes are configured, not hard-coded, because Renovate names its branches
+differently.
 
 What is still forbidden is the thing the rule was written against: a long-lived
 branch with a name nobody can parse, holding work that is not in `dev` and will
@@ -37,21 +43,38 @@ ROOT = Path(__file__).resolve().parent.parent
 ALLOWED = ("release", "dev", "test")
 
 
+def settings() -> dict[str, object]:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        return dict(tomllib.load(handle).get("tool", {}).get("repo-quality", {}))
+
+
 def work_branch_pattern() -> re.Pattern[str]:
     """The grammar a short-lived branch has to match, from pyproject.toml."""
-    with (ROOT / "pyproject.toml").open("rb") as handle:
-        settings = tomllib.load(handle).get("tool", {}).get("repo-quality", {})
-    code = re.escape(str(settings.get("code", "")))
-    types = "|".join(re.escape(str(t)) for t in settings.get("branch_types", []))
+    configuration = settings()
+    code = re.escape(str(configuration.get("code", "")))
+    types = "|".join(re.escape(str(t)) for t in configuration.get("branch_types", []))
     return re.compile(rf"^{code}-\d+/({types})/[a-z0-9][a-z0-9-]*$")
 
 
-def classify(branch: str, pattern: re.Pattern[str]) -> str:
-    """One of: long-lived, work, stray."""
+def bot_branch_prefixes() -> tuple[str, ...]:
+    """Prefixes a bot is allowed to use, from pyproject.toml.
+
+    Dependabot cannot open an issue first and cannot name its branch after one,
+    so the rule that every branch carries an issue number would reject every
+    dependency update - and with it every other pull request open at the time,
+    because the check runs on all of them.
+    """
+    return tuple(str(p) for p in settings().get("bot_branch_prefixes", []))
+
+
+def classify(branch: str, pattern: re.Pattern[str], bots: tuple[str, ...] = ()) -> str:
+    """One of: long-lived, work, bot, stray."""
     if branch in ALLOWED:
         return "long-lived"
     if pattern.match(branch):
         return "work"
+    if any(branch.startswith(prefix) for prefix in bots):
+        return "bot"
     return "stray"
 
 
@@ -94,13 +117,15 @@ def is_merged_into_allowed(branch: str, existing: set[str]) -> bool:
     return False
 
 
-def report(kind: str, branches: list[str], pattern: re.Pattern[str]) -> tuple[list[str], list[str]]:
+def report(
+    kind: str, branches: list[str], pattern: re.Pattern[str], bots: tuple[str, ...] = ()
+) -> tuple[list[str], list[str]]:
     """Print one section and hand back its stray and work branches."""
     stray: list[str] = []
     work: list[str] = []
     print(f"{kind}:" if branches else f"{kind}: none")
     for branch in sorted(branches):
-        label = classify(branch, pattern)
+        label = classify(branch, pattern, bots)
         print(f"  {label:<10} {branch}")
         if label == "stray":
             stray.append(branch)
@@ -127,7 +152,10 @@ def delete_merged(branches: list[str], existing: set[str]) -> None:
 def explain_failure(stray: list[str], missing: list[str]) -> None:
     print("\nbranch policy NOT satisfied")
     for branch in stray:
-        print(f"  {branch} is neither long-lived nor <code>-<issue>/<type>/<slug>")
+        print(
+            f"  {branch} is neither long-lived, nor <code>-<issue>/<type>/<slug>, "
+            f"nor opened by a bot"
+        )
     if missing:
         print(f"  missing: {', '.join(missing)}")
     print("  see docs/branching.md")
@@ -142,6 +170,7 @@ def main() -> int:
     args = parser.parse_args()
 
     pattern = work_branch_pattern()
+    bots = bot_branch_prefixes()
     local = local_branches()
 
     # A CI checkout creates exactly one local branch, so "these three exist" can
@@ -151,11 +180,11 @@ def main() -> int:
     authoritative = remote if args.remote else local
     missing = [b for b in ALLOWED if b not in authoritative]
 
-    stray_local, work_local = report("local branches", local, pattern)
+    stray_local, work_local = report("local branches", local, pattern, bots)
     stray_remote: list[str] = []
     if args.remote:
         print()
-        stray_remote, _ = report(f"{args.remote} branches", remote, pattern)
+        stray_remote, _ = report(f"{args.remote} branches", remote, pattern, bots)
 
     if missing:
         where = args.remote if args.remote else "locally"
@@ -178,7 +207,10 @@ def main() -> int:
         explain_failure(stray_local + stray_remote, missing)
         return 1
 
-    print("\nbranch policy satisfied: release, dev, test, plus work branches with an issue number")
+    print(
+        "\nbranch policy satisfied: release, dev, test, work branches with an "
+        "issue number, and branches a bot opened"
+    )
     return 0
 
 
