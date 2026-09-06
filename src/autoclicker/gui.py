@@ -1,85 +1,116 @@
-import sys
-import threading
-import time
-import pyautogui
-import random
 import json
 import pathlib
+import random
+import sys
+import time
+
 import keyboard
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QCursor, QKeySequence
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QLineEdit,
-                             QPushButton, QComboBox, QMessageBox, QCheckBox, QStatusBar, QGroupBox,
-                             QHBoxLayout, QFileDialog)
+import pyautogui
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QCursor, QKeySequence
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+from autoclicker.core import next_interval, next_position, should_stop
+from autoclicker.settings import (
+    ClickSettings,
+    ClickType,
+    Preset,
+    SettingsError,
+    preset_to_settings,
+    save_preset,
+)
+
 
 class HotkeyThread(QThread):
     start_signal = pyqtSignal()
     stop_signal = pyqtSignal()
     get_pos_signal = pyqtSignal()
-    
+
     def __init__(self, hotkeys):
         super().__init__()
         self.hotkeys = hotkeys
 
     def run(self):
-        keyboard.add_hotkey(self.hotkeys['start'], self.start_signal.emit)
-        keyboard.add_hotkey(self.hotkeys['stop'], self.stop_signal.emit)
-        keyboard.add_hotkey(self.hotkeys['get_pos'], self.get_pos_signal.emit)
+        keyboard.add_hotkey(self.hotkeys["start"], self.start_signal.emit)
+        keyboard.add_hotkey(self.hotkeys["stop"], self.stop_signal.emit)
+        keyboard.add_hotkey(self.hotkeys["get_pos"], self.get_pos_signal.emit)
         keyboard.wait()
 
+
 class ClickerThread(QThread):
+    """Drives the mouse. Every decision it makes comes from autoclicker.core.
+
+    The thread owns the clicking and nothing else: what interval to wait, where
+    to click and when to stop are arithmetic, they live in the core, and they
+    are tested there without a screen.
+    """
+
     update_counter = pyqtSignal(int)
     finished = pyqtSignal()
-    
-    def __init__(self, settings):
+
+    def __init__(self, settings: ClickSettings, cursor):
         super().__init__()
         self.settings = settings
+        # Sampled once, when the run starts, which is what v1.0.0 did: a run
+        # that follows the pointer around would be a different feature.
+        self.cursor = cursor
         self._is_running = True
         self.clicks_done = 0
+        self._rng = random.Random()
 
     def run(self):
         while self._is_running:
-            x, y = self.settings['click_x'], self.settings['click_y']
-            
-            if self.settings['random_offset_enabled']:
-                offset_x = random.randint(-self.settings['random_offset_range'], self.settings['random_offset_range'])
-                offset_y = random.randint(-self.settings['random_offset_range'], self.settings['random_offset_range'])
-                x += offset_x
-                y += offset_y
-            
-            if self.settings['fixed_pos_enabled']:
+            x, y = next_position(self.settings, self._rng, self.cursor)
+
+            # v1.0.0 only moved the mouse when a fixed position was set, so a
+            # random offset without one computed a scatter and then clicked
+            # wherever the pointer happened to be. The offset is the reason
+            # somebody switched it on, so it moves now too.
+            if self.settings.fixed_position is not None or self.settings.random_offset_pixels:
                 pyautogui.moveTo(x, y)
-            
+
             try:
-                if self.settings['click_type'] == "Один клик":
-                    pyautogui.click(button=self.settings['click_button'])
-                elif self.settings['click_type'] == "Двойной клик":
-                    pyautogui.doubleClick(button=self.settings['click_button'])
-                elif self.settings['click_type'] == "Перетаскивание":
-                    pyautogui.mouseDown(button=self.settings['click_button'])
-                    time.sleep(self.settings['drag_duration_sec'])
-                    pyautogui.mouseUp(button=self.settings['click_button'])
+                button = self.settings.mouse_button.value
+                if self.settings.click_type is ClickType.SINGLE:
+                    pyautogui.click(button=button)
+                elif self.settings.click_type is ClickType.DOUBLE:
+                    pyautogui.doubleClick(button=button)
+                elif self.settings.click_type is ClickType.DRAG:
+                    pyautogui.mouseDown(button=button)
+                    time.sleep(self.settings.drag_duration_seconds)
+                    pyautogui.mouseUp(button=button)
             except Exception as e:
                 print(f"Ошибка pyautogui: {e}")
 
             self.clicks_done += 1
             self.update_counter.emit(self.clicks_done)
-            
-            if self.settings['click_count'] != 0 and self.clicks_done >= self.settings['click_count']:
+
+            if should_stop(self.settings, self.clicks_done):
                 self.stop()
                 break
-            
-            sleep_time = self.settings['interval_sec']
-            if self.settings['random_interval_enabled']:
-                sleep_time += random.uniform(-self.settings['random_interval_range'], self.settings['random_interval_range']) / 1000.0
-                if sleep_time < 0: sleep_time = 0.001
-            
-            time.sleep(sleep_time)
-            
+
+            time.sleep(next_interval(self.settings, self._rng))
+
         self.finished.emit()
 
     def stop(self):
         self._is_running = False
+
 
 class AutoClicker(QWidget):
     def __init__(self):
@@ -149,31 +180,27 @@ class AutoClicker(QWidget):
         self.register_global_hotkeys()
         self.load_last_used_settings()
         self.populate_config_list()
-        
+
     def closeEvent(self, event):
         keyboard.unhook_all()
         event.accept()
 
     def init_hotkeys(self):
-        self.hotkeys = {
-            'start': 'F6',
-            'stop': 'F7',
-            'get_pos': 'F8'
-        }
+        self.hotkeys = {"start": "F6", "stop": "F7", "get_pos": "F8"}
         self.key_inputs = {}
-        
+
     def register_global_hotkeys(self):
         self.hotkey_thread = HotkeyThread(self.hotkeys)
         self.hotkey_thread.start_signal.connect(self.start_clicking)
         self.hotkey_thread.stop_signal.connect(self.stop_clicking)
         self.hotkey_thread.get_pos_signal.connect(self.get_position)
         self.hotkey_thread.start()
-        
+
     def init_ui(self):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
-        
+
         click_group = QGroupBox("Настройки клика")
         click_group_layout = QGridLayout()
         click_group.setLayout(click_group_layout)
@@ -191,7 +218,7 @@ class AutoClicker(QWidget):
         self.click_count_input = QLineEdit("0")
         self.click_count_input.setToolTip("0 для бесконечных кликов")
         click_group_layout.addWidget(self.click_count_input, 1, 1, 1, 2)
-        
+
         click_group_layout.addWidget(QLabel("Тип мыши:"), 2, 0)
         self.mouse_button_combo = QComboBox()
         self.mouse_button_combo.addItems(["Левая", "Правая", "Средняя"])
@@ -208,13 +235,13 @@ class AutoClicker(QWidget):
         self.drag_duration_input = QLineEdit("500")
         self.drag_duration_input.setEnabled(False)
         click_group_layout.addWidget(self.drag_duration_input, 4, 1, 1, 2)
-        
+
         main_layout.addWidget(click_group)
 
         random_group = QGroupBox("Случайные настройки")
         random_group_layout = QGridLayout()
         random_group.setLayout(random_group_layout)
-        
+
         self.fixed_pos_checkbox = QCheckBox("Фиксированное положение")
         self.fixed_pos_checkbox.stateChanged.connect(self.toggle_fixed_pos_fields)
         random_group_layout.addWidget(self.fixed_pos_checkbox, 0, 0)
@@ -224,41 +251,41 @@ class AutoClicker(QWidget):
         self.coord_y_input.setPlaceholderText("Y")
         random_group_layout.addWidget(self.coord_x_input, 0, 1)
         random_group_layout.addWidget(self.coord_y_input, 0, 2)
-        
+
         self.random_offset_checkbox = QCheckBox("Случайное смещение (± px)")
         self.random_offset_checkbox.stateChanged.connect(self.toggle_random_offset)
         self.random_offset_input = QLineEdit("5")
         random_group_layout.addWidget(self.random_offset_checkbox, 1, 0)
         random_group_layout.addWidget(self.random_offset_input, 1, 1, 1, 2)
-        
+
         self.random_interval_checkbox = QCheckBox("Случайный интервал (± ms)")
         self.random_interval_checkbox.stateChanged.connect(self.toggle_random_interval)
         self.random_interval_input = QLineEdit("10")
         random_group_layout.addWidget(self.random_interval_checkbox, 2, 0)
         random_group_layout.addWidget(self.random_interval_input, 2, 1, 1, 2)
-        
+
         self.toggle_fixed_pos_fields(self.fixed_pos_checkbox.checkState())
         self.toggle_random_offset(self.random_offset_checkbox.checkState())
         self.toggle_random_interval(self.random_interval_checkbox.checkState())
 
         main_layout.addWidget(random_group)
-        
+
         hotkey_group = QGroupBox("Горячие клавиши")
         hotkey_group_layout = QGridLayout()
         hotkey_group.setLayout(hotkey_group_layout)
-        
+
         hotkey_group_layout.addWidget(QLabel("Старт:"), 0, 0)
-        self.start_key_input = QLineEdit(self.hotkeys['start'])
+        self.start_key_input = QLineEdit(self.hotkeys["start"])
         self.start_key_input.setReadOnly(True)
         hotkey_group_layout.addWidget(self.start_key_input, 0, 1)
 
         hotkey_group_layout.addWidget(QLabel("Стоп:"), 1, 0)
-        self.stop_key_input = QLineEdit(self.hotkeys['stop'])
+        self.stop_key_input = QLineEdit(self.hotkeys["stop"])
         self.stop_key_input.setReadOnly(True)
         hotkey_group_layout.addWidget(self.stop_key_input, 1, 1)
 
         hotkey_group_layout.addWidget(QLabel("Получить позицию:"), 2, 0)
-        self.get_pos_key_input = QLineEdit(self.hotkeys['get_pos'])
+        self.get_pos_key_input = QLineEdit(self.hotkeys["get_pos"])
         self.get_pos_key_input.setReadOnly(True)
         hotkey_group_layout.addWidget(self.get_pos_key_input, 2, 1)
 
@@ -268,15 +295,15 @@ class AutoClicker(QWidget):
         config_group = QGroupBox("Управление конфигурациями")
         config_group_layout = QGridLayout()
         config_group.setLayout(config_group_layout)
-        
+
         config_group_layout.addWidget(QLabel("Доступные конфигурации:"), 0, 0)
         self.config_combo = QComboBox()
         config_group_layout.addWidget(self.config_combo, 0, 1)
-        
+
         load_selected_button = QPushButton("Загрузить")
         load_selected_button.clicked.connect(self.load_selected_config)
         config_group_layout.addWidget(load_selected_button, 0, 2)
-        
+
         main_layout.addWidget(config_group)
 
         settings_buttons_layout = QGridLayout()
@@ -289,24 +316,24 @@ class AutoClicker(QWidget):
         main_layout.addLayout(settings_buttons_layout)
 
         status_layout = QGridLayout()
-        
+
         self.start_button = QPushButton("Старт")
         self.start_button.clicked.connect(self.start_clicking)
         self.stop_button = QPushButton("Стоп")
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.stop_clicking)
-        
+
         self.clicks_done_label = QLabel("Сделано кликов: 0")
-        
+
         status_layout.addWidget(self.start_button, 0, 0)
         status_layout.addWidget(self.stop_button, 0, 1)
         status_layout.addWidget(self.clicks_done_label, 1, 0, 1, 2, Qt.AlignmentFlag.AlignCenter)
-        
+
         main_layout.addLayout(status_layout)
 
         self.status_bar = QStatusBar()
         main_layout.addWidget(self.status_bar)
-        
+
         self.setLayout(main_layout)
 
     def hotkeys_to_string(self, key_code):
@@ -331,7 +358,7 @@ class AutoClicker(QWidget):
 
     def get_position(self):
         self._capture_position()
-        
+
     def _capture_position(self):
         x, y = pyautogui.position()
         self.coord_x_input.setText(str(x))
@@ -339,7 +366,11 @@ class AutoClicker(QWidget):
         self.status_bar.showMessage(f"Координаты: X={x}, Y={y}", 3000)
 
     def mousePressEvent(self, event):
-        if hasattr(self, 'is_getting_position') and self.is_getting_position and event.button() == Qt.MouseButton.LeftButton:
+        if (
+            hasattr(self, "is_getting_position")
+            and self.is_getting_position
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
             x, y = QCursor.pos().x(), QCursor.pos().y()
             self.coord_x_input.setText(str(x))
             self.coord_y_input.setText(str(y))
@@ -365,42 +396,37 @@ class AutoClicker(QWidget):
         self.click_thread.finished.connect(self.stop_clicking)
         self.click_thread.start()
 
-    def get_current_settings(self):
-        settings = {}
-        try:
-            interval = int(self.interval_input.text())
-            if self.interval_unit_combo.currentText() == "s":
-                settings['interval_sec'] = interval
-            else:
-                settings['interval_sec'] = interval / 1000.0
-            
-            settings['click_count'] = int(self.click_count_input.text())
-            settings['click_type'] = self.click_type_combo.currentText()
-            settings['fixed_pos_enabled'] = self.fixed_pos_checkbox.isChecked()
-            settings['random_offset_enabled'] = self.random_offset_checkbox.isChecked()
-            settings['random_interval_enabled'] = self.random_interval_checkbox.isChecked()
+    def current_preset(self) -> Preset:
+        """Everything the widgets say, in the shape the preset file uses."""
+        return Preset(
+            interval=self.interval_input.text(),
+            interval_unit=self.interval_unit_combo.currentText(),
+            click_count=self.click_count_input.text(),
+            mouse_button=self.mouse_button_combo.currentText(),
+            click_type=self.click_type_combo.currentText(),
+            drag_duration=self.drag_duration_input.text(),
+            fixed_pos_enabled=self.fixed_pos_checkbox.isChecked(),
+            coord_x=self.coord_x_input.text(),
+            coord_y=self.coord_y_input.text(),
+            random_offset_enabled=self.random_offset_checkbox.isChecked(),
+            random_offset_range=self.random_offset_input.text(),
+            random_interval_enabled=self.random_interval_checkbox.isChecked(),
+            random_interval_range=self.random_interval_input.text(),
+            hotkeys=self.hotkeys,
+        )
 
-            if settings['fixed_pos_enabled']:
-                settings['click_x'] = int(self.coord_x_input.text())
-                settings['click_y'] = int(self.coord_y_input.text())
-            else:
-                settings['click_x'], settings['click_y'] = pyautogui.position()
-            
-            if settings['random_offset_enabled']:
-                settings['random_offset_range'] = int(self.random_offset_input.text())
-            
-            if settings['random_interval_enabled']:
-                settings['random_interval_range'] = int(self.random_interval_input.text())
-            
-            button_map = {"Левая": "left", "Правая": "right", "Средняя": "middle"}
-            settings['click_button'] = button_map[self.mouse_button_combo.currentText()]
-            
-            if settings['click_type'] == "Перетаскивание":
-                settings['drag_duration_sec'] = int(self.drag_duration_input.text()) / 1000
-            
-            return settings
-        except ValueError:
-            QMessageBox.warning(self, "Ошибка ввода", "Проверьте правильность числовых значений.")
+    def get_current_settings(self):
+        """The validated run, or None with the reason already on screen.
+
+        The window and a preset file go through the same validator, so a
+        setting the file would refuse cannot be started from the interface
+        either - and the message names the field rather than quoting a
+        Python exception.
+        """
+        try:
+            return preset_to_settings(self.current_preset())
+        except SettingsError as error:
+            QMessageBox.warning(self, "Ошибка ввода", str(error))
             return None
 
     def stop_clicking(self):
@@ -409,7 +435,7 @@ class AutoClicker(QWidget):
         if self.click_thread and self.click_thread.isRunning():
             self.click_thread.stop()
             self.click_thread.wait()
-        
+
         self.clicking = False
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -430,7 +456,7 @@ class AutoClicker(QWidget):
 
     def save_last_config_path(self, file_path):
         try:
-            with open(self.last_config_file, 'w') as f:
+            with open(self.last_config_file, "w") as f:
                 f.write(file_path)
         except Exception as e:
             print(f"Не удалось сохранить путь к последней конфигурации: {e}")
@@ -438,7 +464,7 @@ class AutoClicker(QWidget):
     def load_last_used_settings(self):
         if self.last_config_file.exists():
             try:
-                with open(self.last_config_file, 'r') as f:
+                with open(self.last_config_file) as f:
                     file_path = f.read().strip()
                     if file_path:
                         self.load_settings(file_path)
@@ -454,61 +480,51 @@ class AutoClicker(QWidget):
 
     def save_settings(self):
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        file_path, _ = QFileDialog.getSaveFileName(self, "Сохранить настройки", str(self.config_dir), "JSON Files (*.json)")
-        if file_path:
-            settings = {
-                'interval': self.interval_input.text(),
-                'interval_unit': self.interval_unit_combo.currentText(),
-                'click_count': self.click_count_input.text(),
-                'mouse_button': self.mouse_button_combo.currentText(),
-                'click_type': self.click_type_combo.currentText(),
-                'drag_duration': self.drag_duration_input.text(),
-                'fixed_pos_enabled': self.fixed_pos_checkbox.isChecked(),
-                'coord_x': self.coord_x_input.text(),
-                'coord_y': self.coord_y_input.text(),
-                'random_offset_enabled': self.random_offset_checkbox.isChecked(),
-                'random_offset_range': self.random_offset_input.text(),
-                'random_interval_enabled': self.random_interval_checkbox.isChecked(),
-                'random_interval_range': self.random_interval_input.text(),
-                'hotkeys': self.hotkeys
-            }
-            try:
-                with open(file_path, 'w') as f:
-                    json.dump(settings, f, indent=4)
-                self.save_last_config_path(file_path)
-                self.populate_config_list()
-                self.status_bar.showMessage("Настройки сохранены.", 3000)
-            except Exception as e:
-                QMessageBox.warning(self, "Ошибка сохранения", f"Не удалось сохранить файл: {e}")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Сохранить настройки", str(self.config_dir), "JSON Files (*.json)"
+        )
+        if not file_path:
+            return
+        try:
+            save_preset(self.current_preset(), pathlib.Path(file_path))
+            self.save_last_config_path(file_path)
+            self.populate_config_list()
+            self.status_bar.showMessage("Настройки сохранены.", 3000)
+        except OSError as e:
+            QMessageBox.warning(self, "Ошибка сохранения", f"Не удалось сохранить файл: {e}")
 
     def load_settings(self, file_path=None):
         if not file_path:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Загрузить настройки", str(self.config_dir), "JSON Files (*.json)")
-        
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Загрузить настройки", str(self.config_dir), "JSON Files (*.json)"
+            )
+
         if file_path:
             try:
-                with open(file_path, 'r') as f:
+                with open(file_path) as f:
                     settings = json.load(f)
-                
-                self.interval_input.setText(settings.get('interval', "100"))
-                self.interval_unit_combo.setCurrentText(settings.get('interval_unit', "ms"))
-                self.click_count_input.setText(settings.get('click_count', "0"))
-                self.mouse_button_combo.setCurrentText(settings.get('mouse_button', "Левая"))
-                self.click_type_combo.setCurrentText(settings.get('click_type', "Один клик"))
-                self.drag_duration_input.setText(settings.get('drag_duration', "500"))
-                self.fixed_pos_checkbox.setChecked(settings.get('fixed_pos_enabled', False))
-                self.coord_x_input.setText(settings.get('coord_x', ""))
-                self.coord_y_input.setText(settings.get('coord_y', ""))
-                self.random_offset_checkbox.setChecked(settings.get('random_offset_enabled', False))
-                self.random_offset_input.setText(settings.get('random_offset_range', "5"))
-                self.random_interval_checkbox.setChecked(settings.get('random_interval_enabled', False))
-                self.random_interval_input.setText(settings.get('random_interval_range', "10"))
-                
-                if 'hotkeys' in settings:
-                    self.hotkeys = settings['hotkeys']
-                    self.start_key_input.setText(self.hotkeys['start'])
-                    self.stop_key_input.setText(self.hotkeys['stop'])
-                    self.get_pos_key_input.setText(self.hotkeys['get_pos'])
+
+                self.interval_input.setText(settings.get("interval", "100"))
+                self.interval_unit_combo.setCurrentText(settings.get("interval_unit", "ms"))
+                self.click_count_input.setText(settings.get("click_count", "0"))
+                self.mouse_button_combo.setCurrentText(settings.get("mouse_button", "Левая"))
+                self.click_type_combo.setCurrentText(settings.get("click_type", "Один клик"))
+                self.drag_duration_input.setText(settings.get("drag_duration", "500"))
+                self.fixed_pos_checkbox.setChecked(settings.get("fixed_pos_enabled", False))
+                self.coord_x_input.setText(settings.get("coord_x", ""))
+                self.coord_y_input.setText(settings.get("coord_y", ""))
+                self.random_offset_checkbox.setChecked(settings.get("random_offset_enabled", False))
+                self.random_offset_input.setText(settings.get("random_offset_range", "5"))
+                self.random_interval_checkbox.setChecked(
+                    settings.get("random_interval_enabled", False)
+                )
+                self.random_interval_input.setText(settings.get("random_interval_range", "10"))
+
+                if "hotkeys" in settings:
+                    self.hotkeys = settings["hotkeys"]
+                    self.start_key_input.setText(self.hotkeys["start"])
+                    self.stop_key_input.setText(self.hotkeys["stop"])
+                    self.get_pos_key_input.setText(self.hotkeys["get_pos"])
                     self.register_global_hotkeys()
 
                 self.save_last_config_path(file_path)
@@ -518,9 +534,15 @@ class AutoClicker(QWidget):
             except Exception as e:
                 QMessageBox.warning(self, "Ошибка загрузки", f"Не удалось загрузить файл: {e}")
 
-if __name__ == "__main__":
+
+def main() -> int:
+    """Open the window. Called by the launcher at the top of the repository."""
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    autoclicker = AutoClicker()
-    autoclicker.show()
-    sys.exit(app.exec())
+    window = AutoClicker()
+    window.show()
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

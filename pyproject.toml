@@ -1,0 +1,122 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autoclicker"
+version = "1.1.0"
+description = "A configurable auto-clicker with presets, hotkeys and randomised timing."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Igors Volohovs", email = "igorsvolohovs@gmail.com" }]
+keywords = ["autoclicker", "automation", "pyqt6", "pyautogui"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+dependencies = ["PyQt6>=6.6", "pyautogui>=0.9.54", "keyboard>=0.13.5"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-benchmark>=4.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "radon>=6.0",
+    "pre-commit>=3.7",
+]
+release = ["pyinstaller>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/IGORSVOLOHOVS/Autoclicker"
+Issues = "https://github.com/IGORSVOLOHOVS/Autoclicker/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------- formatting
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests", "scripts", "benchmarks"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "C90", "S", "RUF"]
+ignore = ["S101"]  # assert is how pytest works
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+extra-standard-library = ["tomllib"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "C90"]
+"benchmarks/*" = ["S"]
+"scripts/*" = ["S404", "S603", "S607"]
+# The Qt shell is the part this standard cannot reach: it is 500 lines of
+# widget wiring, it needs a screen to run, and splitting it further would move
+# code without making any of it testable. Its logic now lives in the core.
+"src/autoclicker/gui.py" = ["C90", "S", "E501", "RUF001", "RUF002", "RUF003"]
+# RUF001 flags Cyrillic letters inside strings as characters that could be
+# mistaken for Latin ones. Here they are the interface, and the label tables
+# that map it to the domain - the rule is right in general and wrong for these
+# two files. See docs/decisions.md.
+"src/autoclicker/settings.py" = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ------------------------------------------------------- contribution shape
+[tool.repo-quality]
+code = "acl"
+long_lived_branches = ["release", "dev", "test"]
+branch_types = [
+    "feat", "fix", "docs", "test", "refactor",
+    "perf", "build", "ci", "chore", "security",
+]
+commit_types = [
+    "feat", "fix", "docs", "test", "refactor",
+    "perf", "build", "ci", "chore", "security",
+]
+commit_scopes = ["core", "settings", "gui", "ci", "docs", "scripts", "benchmarks", "release"]
+
+# --------------------------------------------------------------- type checks
+# The domain only. gui.py imports PyQt6, pyautogui and keyboard, none of which
+# ship type stubs, and none of which can be installed on a runner that has no
+# display - checking it would mean silencing every import and calling the
+# result type safety.
+[tool.mypy]
+files = ["src/autoclicker/core.py", "src/autoclicker/settings.py"]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+
+# --------------------------------------------------------------------- tests
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# The package is reached from src/ rather than installed. CI would otherwise
+# have to install PyQt6 and keyboard to run tests that import neither, and
+# `keyboard` wants root on Linux.
+pythonpath = ["src"]
+addopts = "-q --strict-markers --strict-config"
+markers = ["slow: takes more than a second"]
+
+[tool.coverage.run]
+source = ["autoclicker"]
+branch = true
+# The Qt shell is excluded, not forgotten: covering it means driving widgets on
+# a runner with no screen, and a percentage bought that way measures the test
+# harness rather than the program. Everything it decides now lives in core.py
+# and settings.py, which are covered.
+omit = ["*/autoclicker/gui.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

@@ -1,0 +1,57 @@
+name: Feature request
+description: Something the project should be able to do and cannot.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What you were trying to do when you needed this. Describe the problem,
+        not the solution - a solution proposed before the problem is written
+        down usually turns out to solve a different one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: How it would work from the outside. Command, flag, or API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you considered instead
+      description: Including doing nothing, and why that is not enough.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true for this to be closed. One check per line.
+      value: |
+        - [ ] The behaviour works as described above
+        - [ ] Tests cover it, including the empty and invalid cases
+        - [ ] README or docs/ describes it if it is user-visible
+        - [ ] A benchmark exists if it touches the domain layer
+        - [ ] CHANGELOG.md has an entry under [Unreleased]
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: layer
+    attributes:
+      label: Which layer does this belong in
+      description: See docs/architecture.md. Logic goes in the domain layer, never in a shell.
+      options:
+        - label: Domain (`core.py`) - no I/O
+        - label: CLI shell
+        - label: Desktop shell
+        - label: Tooling in `scripts/`
+        - label: Not sure

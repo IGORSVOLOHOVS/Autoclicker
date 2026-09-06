@@ -1,0 +1,50 @@
+# The shape of a contribution, checked before a human is asked to read it.
+#
+# Branch name, commit subjects, sign-off, and that the pull request closes an
+# issue. None of these are opinions, so none of them should cost a review
+# comment - and a reviewer who has to write "please rename your branch" three
+# times a week stops reading the diff carefully.
+#
+# Everything here also runs locally:
+#     python scripts/enforce_contribution_policy.py
+name: Contribution policy
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+    branches: [release, dev, test]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contribution-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Branch, commits and issue
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, so the commits on this branch can be compared
+          # against the base. A shallow clone has nothing to compare with.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Write the pull request body to a file
+        # Through the environment, not through ${{ }} inside a shell string:
+        # a body containing a quote would otherwise end the command early.
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" > pr-body.txt
+
+      - name: Check branch name, commits and issue link
+        run: |
+          python scripts/enforce_contribution_policy.py \
+            --base "${{ github.event.pull_request.base.ref }}" \
+            --pr-body-file pr-body.txt

@@ -1,0 +1,11 @@
+# Every change starts as an issue, so the blank issue is switched off: a
+# report with no shape is a report somebody has to chase.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/IGORSVOLOHOVS/repo-quality-template/security/advisories/new
+    about: Report privately. Do not open a public issue for a vulnerability - see SECURITY.md.
+  - name: Question about the standard
+    url: https://github.com/IGORSVOLOHOVS/repo-quality-template/discussions
+    about: Ask before opening an issue if you are not sure this is a defect.

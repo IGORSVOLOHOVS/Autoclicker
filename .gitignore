@@ -8,3 +8,15 @@ last_config.json
 # and refuses past 100. A built archive belongs on the Releases page, not in
 # the history.
 autoclicker.zip
+
+# Build and check artefacts
+*.egg-info/
+dist/
+build/
+.coverage
+coverage.xml
+benchmark.json
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+__pycache__/

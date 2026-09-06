@@ -1,0 +1,14 @@
+# One place that says who reviews what.
+#
+# GitHub requests these reviewers automatically, and "Require review from Code
+# Owners" in branch protection turns the request into a gate. Written once
+# here rather than repeated in a workflow, a document and a settings page,
+# because three copies of a reviewer list is two copies too many.
+
+*                       @IGORSVOLOHOVS
+
+# The parts where a mistake is expensive and silent.
+/.github/workflows/     @IGORSVOLOHOVS
+/scripts/               @IGORSVOLOHOVS
+/SECURITY.md            @IGORSVOLOHOVS
+/docs/decisions.md      @IGORSVOLOHOVS

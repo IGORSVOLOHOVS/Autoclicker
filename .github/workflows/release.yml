@@ -1,0 +1,85 @@
+# Point 13: tagging a version produces something a person can download -
+# a Windows .exe and a cross-platform .zip, attached to a GitHub Release.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, e.g. v1.2.3"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} artefact
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock && pip install -e ".[release]"
+
+      - name: Install a virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+
+      - name: Verify before packaging (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pytest
+
+      - name: Verify before packaging (Windows)
+        if: runner.os == 'Windows'
+        run: pytest
+
+      - name: Build artefact
+        run: python scripts/build_release_artifact.py --version "${{ github.ref_name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: artefact-${{ matrix.os }}
+          path: release/*
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    # A manual run has no tag, and GitHub Releases cannot be created
+    # without one. Skipping keeps a trial run green instead of emailing a
+    # failure that says nothing was wrong.
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefacts
+      - name: Software bill of materials
+        # Every release says what is inside it, so "are we affected by the
+        # hole announced this morning" is answered from the release itself
+        # rather than from a lock file somebody guesses was the right one.
+        run: python scripts/generate_sbom.py --output release/sbom.json
+
+      - name: Collect files
+        run: |
+          mkdir -p release
+          find artefacts -type f \( -name '*.zip' -o -name '*.exe' -o -name '*.sha256' \) \
+            -exec cp {} release/ \;
+          sha256sum release/sbom.json > release/sbom.json.sha256
+          ls -la release
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          body_path: CHANGELOG.md
+          fail_on_unmatched_files: true

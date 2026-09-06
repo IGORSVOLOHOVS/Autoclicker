@@ -1,0 +1,48 @@
+name: Task
+description: Work that is neither a defect nor a new capability - docs, CI, refactoring, chores.
+title: "chore: "
+labels: ["task"]
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Commit type this will produce
+      description: The same vocabulary the commit message and the branch name use.
+      options:
+        - docs
+        - test
+        - refactor
+        - perf
+        - build
+        - ci
+        - chore
+        - security
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+      description: >
+        What is worse today because this has not been done. A task with no
+        answer here is a task that can wait, and saying so is a useful outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ]
+        - [ ] CI is green on the pull request
+    validations:
+      required: true
