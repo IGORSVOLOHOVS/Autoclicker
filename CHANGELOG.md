@@ -8,6 +8,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The branch policy rejected every branch Dependabot opened, which turned every
+  check in the repository red on the day dependency monitoring was switched on.
+  Bot prefixes are now a configured, opt-in class.
 - A random interval wider than the interval itself silently became a 1 ms click
   storm: the sleep went negative and was clamped without a word. Settings now
   refuse that combination and name both numbers. Presets already in use are
