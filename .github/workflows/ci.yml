@@ -72,7 +72,7 @@ jobs:
       - run: pip install -r requirements-dev.lock
       - name: Enforce the coverage threshold
         run: pytest --cov --cov-report=xml --cov-report=term
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.xml
@@ -102,7 +102,7 @@ jobs:
       - run: pip install -r requirements-dev.lock
       - name: Collect quality metrics
         run: python scripts/collect_quality_metrics.py --output quality-report.json --fail-under 70
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: quality-report
           path: quality-report.json
@@ -119,7 +119,7 @@ jobs:
       - run: pip install -r requirements-dev.lock
       - name: Run benchmarks
         run: pytest benchmarks --benchmark-only --benchmark-json=benchmark.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: benchmark
           path: benchmark.json
