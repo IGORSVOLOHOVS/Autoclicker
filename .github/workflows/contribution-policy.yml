@@ -26,7 +26,7 @@ jobs:
     name: Branch, commits and issue
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The whole history, so the commits on this branch can be compared
           # against the base. A shallow clone has nothing to compare with.
