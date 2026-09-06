@@ -116,9 +116,6 @@ version field and a migration, in one go.
 Open work, kept separate on purpose - a list of "we chose this" that quietly
 absorbs "we did not get to it" stops being useful:
 
-- **No usage screenshots** (point 11). The window exists and nobody has
-  captured it; `scripts/capture_usage_screenshots.py` was written for a tkinter
-  application and needs adapting to Qt.
 - **Release notes do not name fixed vulnerabilities** - OpenSSF
   `release_notes_vulns`. There have been none, which is not the same as having
   a practice.
