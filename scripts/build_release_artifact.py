@@ -24,8 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE = ROOT / "release"
-APP_NAME = "text-analyser"
-ENTRY = ROOT / "src" / "quality_template" / "app.py"
+APP_NAME = "autoclicker"
+# The launcher, not the package module: it puts src/ on the path before
+# importing anything, which is what a frozen build needs too.
+ENTRY = ROOT / "run_autoclicker.py"
 
 
 def sha256_of(path: Path) -> str:
@@ -63,6 +65,17 @@ def build_executable(version: str) -> Path:
         "--clean",
         "--onefile",
         "--windowed",
+        # PyInstaller refuses to build when it can see more than one set of Qt
+        # bindings, and a developer machine often has PyQt5 left over from
+        # something unrelated. This program uses PyQt6; the others are named
+        # here so the build does not depend on what else happens to be
+        # installed.
+        "--exclude-module",
+        "PyQt5",
+        "--exclude-module",
+        "PySide2",
+        "--exclude-module",
+        "PySide6",
         "--name",
         APP_NAME,
         "--paths",
