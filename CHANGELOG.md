@@ -4,7 +4,41 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0] - unreleased
+
+### Fixed
+
+- A random interval wider than the interval itself silently became a 1 ms click
+  storm: the sleep went negative and was clamped without a word. Settings now
+  refuse that combination and name both numbers. Presets already in use are
+  unaffected - a 25 ms spread on a 50 ms interval was always valid.
+- The random offset did nothing unless "fixed position" was ticked. The
+  scattered coordinate was computed every iteration and thrown away. It now
+  applies to the cursor as well.
+
+### Changed
+
+- **The launcher is `run_autoclicker.py`.** A module named `autoclicker.py`
+  next to a package named `autoclicker` shadows it, and the resulting
+  "not a package" error points at nothing. The README said `python main.py`,
+  which had not been the name of any file for some time.
+- The code moved into `src/autoclicker/`: `core.py` and `settings.py` are pure
+  and tested, `gui.py` is the Qt window over them.
+- A setting that cannot do what it says is refused when it is entered, with a
+  message naming the field, rather than at run time.
+
+### Added
+
+- 35 tests, 100 % branch coverage of the domain, with an 85 % floor in CI.
+- Benchmarks over the per-click decisions.
+- CI on Ubuntu and Windows, Python 3.10 and 3.12: ruff, format, strict mypy,
+  tests, coverage gate, gitleaks over full history, ISO 25010 metrics.
+- Issue and pull-request templates, `CODEOWNERS`, Dependabot, SBOM per release.
+- `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`.
+- `docs/architecture.md`, `docs/quality-iso25010.md`, `docs/decisions.md`,
+  `docs/workflow.md`, `docs/branching.md`.
+- Three branches: `release`, `dev`, `test`.
+
 
 ### Added
 
