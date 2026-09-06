@@ -1,0 +1,125 @@
+# Point 1 of the standard: every push and every pull request is linted, tested
+# and measured. Nothing reaches release without passing this.
+name: CI
+
+on:
+  push:
+    branches: [release, dev, test, "*-*/**"]
+  pull_request:
+    branches: [release, dev, test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock
+      - name: Ruff lint
+        run: ruff check --output-format=github .
+      - name: Ruff format check
+        run: ruff format --check .
+      - name: Type check
+        run: python -m mypy
+
+  test:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock
+
+      # No display, and none needed. The Qt shell is the only part that wants
+      # one, and every decision it used to make now lives in core.py and
+      # settings.py, which are pure. The package is reached through pytest's
+      # pythonpath rather than installed, so a headless runner never has to
+      # bring up PyQt6 or let `keyboard` ask for root.
+      - name: Run tests
+        run: pytest --cov --cov-report=term --cov-fail-under=0
+
+  coverage:
+    name: Coverage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.lock
+      - name: Enforce the coverage threshold
+        run: pytest --cov --cov-report=xml --cov-report=term
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  security:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks needs history, not just the tip
+      - name: Scan for committed credentials
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  quality:
+    name: ISO/IEC 25010 metrics
+    runs-on: ubuntu-latest
+    needs: [test, coverage]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.lock
+      - name: Collect quality metrics
+        run: python scripts/collect_quality_metrics.py --output quality-report.json --fail-under 70
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: quality-report.json
+
+  benchmark:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.lock
+      - name: Run benchmarks
+        run: pytest benchmarks --benchmark-only --benchmark-json=benchmark.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark
+          path: benchmark.json

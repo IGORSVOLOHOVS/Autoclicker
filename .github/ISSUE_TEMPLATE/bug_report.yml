@@ -1,0 +1,75 @@
+name: Bug report
+description: Something behaves differently from what the documentation says.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Acceptance criteria are required. An issue whose "done" is a matter of
+        opinion cannot be closed by a pull request, and it is the reviewer who
+        finds that out.
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: The behaviour you actually see.
+      placeholder: "`quality-template report file.txt` prints 0 sentences for a file that has three."
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-should-happen
+    attributes:
+      label: What should happen instead
+      description: Quote the README or the docstring that says so, if there is one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The shortest sequence that shows it. Include the input if the input matters.
+      value: |
+        ```bash
+        python -m quality_template.cli ...
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >
+        What must be true for this to be closed. One check per line. At least
+        one of them is normally "a test that fails today and passes after".
+      value: |
+        - [ ] A regression test reproduces this and fails on the current code
+        - [ ] The test passes after the fix
+        - [ ] CHANGELOG.md has an entry under [Unreleased]
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Tag, or the commit you are on.
+      placeholder: v1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - more than one
+    validations:
+      required: true

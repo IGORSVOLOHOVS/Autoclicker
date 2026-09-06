@@ -1,0 +1,28 @@
+# Point 14: exactly three branches - release, dev, test. Nothing else.
+# This job fails the moment a fourth branch appears, so the rule is enforced by
+# the repository rather than by memory.
+name: Branch policy
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # Monday morning, catches branches pushed by tooling
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Long-lived branches, and work branches with an issue number
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify branch layout
+        run: python scripts/enforce_branch_policy.py --remote origin

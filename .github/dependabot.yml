@@ -1,0 +1,26 @@
+# OpenSSF `dependency_monitoring`, silver level: something has to watch for a
+# dependency with a known hole, because nobody reads release notes for a
+# library they pinned eighteen months ago.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+      include: scope
+    labels: ["dependencies"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: scope
+    labels: ["dependencies"]
