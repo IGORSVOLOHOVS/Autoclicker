@@ -1,33 +1,74 @@
 # Decisions that look like gaps
 
-This standard is measured against the [OpenSSF Best Practices
-Badge](https://github.com/ossf/best-practices-badge) and [OpenSSF
-Scorecard](https://github.com/ossf/scorecard) — see
-[`standards-comparison.md`](standards-comparison.md). Some of their criteria
-are deliberately not met.
+This project follows revision 2 of the
+[repo-quality-template](https://github.com/IGORSVOLOHOVS/repo-quality-template)
+standard - twenty-four points, themselves measured against the OpenSSF Best
+Practices Badge.
 
-Each one is written down here with its reason, because a divergence that is not
-recorded gets rediscovered as a defect, argued about, and then decided the same
-way again six months later.
+Some of those points are deliberately not met here. Each one is written down
+with its reason and with the thing that would make it worth reopening, because
+a divergence that is not recorded gets rediscovered as a defect, argued about,
+and decided the same way again six months later.
 
 ---
 
-## Internationalisation: no
+## Point 12, English throughout: the interface stays Russian
 
-OpenSSF `internationalization`, silver level.
+The standard says English everywhere. Here, code, comments, commit messages,
+documentation, issues and pull requests are English. The **window** is Russian:
+"Один клик", "Левая", "Перетаскивание".
 
-Point 12 of this standard requires English throughout — code, comments, commit
-messages, documentation, issues. That is the opposite of what silver asks for.
+**Why.** The people who use this program read Russian. Translating the
+interface to satisfy a rule about the repository would be changing the product
+to make the paperwork tidier.
 
-**Why.** One author, one language, and a repository that a stranger can read.
-Mixed-language identifiers are worse than either language alone: `def
-проверить_файл` cannot be grepped by half the people who need to, and a
-docstring in one language attached to a symbol in another is where translation
-drift starts.
+The split is enforced rather than hoped for. `settings.py` holds two tables -
+`BUTTON_LABELS` and `CLICK_TYPE_LABELS` - and they are the only place below the
+window where a Russian string appears. `core.py` speaks in `ClickType.SINGLE`
+and `MouseButton.LEFT`. A translated label changes one dictionary and nothing
+else.
 
-If this project ever ships a user interface to people who do not read English,
-this decision is reopened — that is the trigger, not a general wish to be
-international.
+`ruff`'s RUF001 rule, which flags Cyrillic letters that could be mistaken for
+Latin ones, is switched off for `gui.py` and `settings.py` and nowhere else.
+
+**Reopen if** the program gains users who do not read Russian. Then it is not a
+translation, it is internationalisation, and it is a feature with its own
+issue.
+
+---
+
+## No test drives the Qt window
+
+OpenSSF `test_most`, and the standard's own point 3.
+
+**Why.** It needs a display; on a Linux runner a virtual one; and `keyboard`
+wants root there to claim the global hotkeys. What a widget test would actually
+check - that a checkbox flips a boolean - is not where either of the two faults
+found during this refactoring lived. Both were arithmetic, and the arithmetic
+is now covered at 100 %.
+
+Coverage **excludes** `gui.py` explicitly rather than quietly counting it, so
+the 100 % figure is a statement about the two modules it names.
+
+**Reopen if** a fault is ever traced to the widget wiring. That is the evidence
+that would change the calculation.
+
+---
+
+## The released binary is not signed
+
+OpenSSF `signed_releases`, silver level.
+
+**Why.** Code-signing certificates cost money annually, and this is a free
+program with one maintainer. The release carries a SHA-256 per artefact and a
+CycloneDX SBOM, so what shipped can be identified even though its author cannot
+be cryptographically proven.
+
+Tags are signed - `git tag -s` - which covers the source.
+
+**Worth knowing:** a program that moves the mouse and installs a keyboard hook
+looks, to an antivirus, exactly like something unpleasant. Signing would help
+with that, and it is the strongest argument for reopening this.
 
 ---
 
@@ -35,85 +76,50 @@ international.
 
 OpenSSF `two_person_review`, gold level.
 
-Pull requests require one approval, from `CODEOWNERS`.
-
-**Why.** There is one maintainer. A rule that cannot be satisfied is not a
-stricter rule, it is a rule that gets bypassed, and a bypassed rule teaches
-that the gates are advisory. One human approval and a green pipeline is the
-strongest gate that can actually hold here.
-
-Reopen when there are two people who can review this code.
+**Why.** One maintainer. A rule nobody can satisfy is not a stricter rule, it
+is a rule that gets bypassed, and a bypassed rule teaches that the gates are
+advisory. One approval from `CODEOWNERS` plus a green pipeline is the strongest
+gate that can actually hold here.
 
 ---
 
-## Governance, roles, bus factor: no
+## No fuzzing, no dynamic analysis
 
-OpenSSF `governance`, `roles_responsibilities`, `bus_factor`, silver and gold.
+OpenSSF `dynamic_analysis`, passing level.
 
-**Why.** Same reason, stated plainly rather than papered over with a
-`GOVERNANCE.md` that says "the maintainer decides". The bus factor of this
-repository is one. Writing a governance document would not change that number;
-it would only make it harder to see.
+**Why.** The domain is arithmetic over integers and floats, and JSON parsing
+handed straight to a validator that rejects anything it does not recognise.
+There is no parser of a binary format, no network input, and no memory
+management. A fuzzer would be exercising CPython.
 
-The honest mitigation is that everything here is executable and documented:
-`scripts/apply_template_to_repo.py`, `docs/workflow.md`, and CI that fails
-loudly. Somebody picking this up finds instructions, not folklore.
+**Reopen if** the program ever reads a format it did not write.
 
 ---
 
-## Reproducible builds: not yet
+## The preset format was not modernised
 
-OpenSSF `build_reproducible`, silver level.
+Strings where numbers belong, Russian labels in a data file, a schema with no
+version field.
 
-**Why.** The release artefact is built by PyInstaller, which embeds a
-timestamp and a build path. Making that reproducible means pinning the Python
-build, normalising the environment and post-processing the executable — real
-work, for a benefit this project does not yet have a use for.
+**Why.** Every preset anybody saved since v1.0.0 is in that format. Changing it
+means either breaking them or writing a migration for a file with four users.
+The awkwardness is confined to the `Preset` dataclass, and nothing above it has
+to know.
 
-What exists instead: a SHA-256 per artefact and a CycloneDX SBOM per release,
-so what shipped can be identified even though it cannot yet be re-derived.
-
-Reopen when somebody needs to verify a binary they did not build.
-
----
-
-## Fuzzing and dynamic analysis: no
-
-OpenSSF `dynamic_analysis`, `fuzzing`, passing and silver.
-
-**Why.** The domain layer is pure text processing over `str` with no parser,
-no network input and no memory management. A fuzzer would be exercising
-CPython's own string handling.
-
-Reopen the moment this project parses a binary format or takes untrusted input
-over a socket. Then it is not optional.
-
----
-
-## Signed releases: partly
-
-OpenSSF `signed_releases`, `version_tags_signed`, silver level.
-
-Tags are signed — `git tag -s`, see [`workflow.md`](workflow.md). Release
-artefacts are not.
-
-**Why.** A signed tag proves who cut the release, which is the part that
-matters when the source is what people consume. Signing the binaries as well
-means key management for a project nobody installs from a binary yet.
+**Reopen if** a new setting cannot be expressed in it. Then the format gets a
+version field and a migration, in one go.
 
 ---
 
 ## What is *not* on this list
 
-Two OpenSSF criteria this standard fails and does **not** defend, because they
-are simply not done yet:
+Open work, kept separate on purpose - a list of "we chose this" that quietly
+absorbs "we did not get to it" stops being useful:
 
-- `release_notes_vulns` — release notes do not yet call out fixed
-  vulnerabilities by name. They should.
-- `know_secure_design`, `know_common_errors` — nothing records that the
-  maintainer has read the common design and implementation errors for this kind
-  of software.
-
-They are open work, not decisions. Keeping them here, separated from the
-decisions, is the point of the file: a list of "we chose this" that quietly
-absorbs "we did not get to this" stops being useful.
+- **No usage screenshots** (point 11). The window exists and nobody has
+  captured it; `scripts/capture_usage_screenshots.py` was written for a tkinter
+  application and needs adapting to Qt.
+- **Release notes do not name fixed vulnerabilities** - OpenSSF
+  `release_notes_vulns`. There have been none, which is not the same as having
+  a practice.
+- **No reproducible build.** PyInstaller embeds a timestamp and a build path.

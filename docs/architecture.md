@@ -1,72 +1,117 @@
 # Architecture
 
-## The shape
-
-Three layers, with dependencies pointing one way only.
+Two layers, and the dependency points one way.
 
 ```
-        ┌──────────────┐      ┌──────────────┐
-        │  cli.py      │      │  app.py      │     shells: parse input,
-        │  (terminal)  │      │  (tkinter)   │     render output
-        └───────┬──────┘      └──────┬───────┘
-                │                    │
-                └─────────┬──────────┘
-                          ▼
-                  ┌───────────────┐
-                  │   core.py     │                domain: pure functions
-                  │  (no I/O)     │                over plain data
-                  └───────────────┘
+run_autoclicker.py
+        │
+        ▼
+src/autoclicker/gui.py      Qt widgets, threads, the mouse, the hotkeys
+        │
+        ▼
+src/autoclicker/core.py     when to click, where to click, when to stop
+src/autoclicker/settings.py what a run is, what a preset file means
 ```
 
-`core.py` imports nothing but the standard library's `re`, `collections` and
-`dataclasses`. It does not read files, does not print and does not know a user
-interface exists.
+`core` and `settings` import `random`, `json`, `dataclasses`, `enum` and
+`pathlib`. Not Qt, not pyautogui, not keyboard. That is the whole rule, and
+everything below follows from it.
 
-## Why this way
+## Why the split exists
 
-**The shells are interchangeable.** `cli.py` and `app.py` both call
-`analyse_text` and `top_words` and do nothing else of substance. A third shell —
-an HTTP endpoint, say — would be another file at the same level, with no change
-below it. It also means the CLI and the GUI cannot disagree about what a word
-is, because there is only one implementation.
+v1.0.0 was a single 526-line file. It worked, and there was no way to find out
+whether it still worked except by opening it and clicking. Two faults had been
+living in it since release, both in code that a test would have caught in a
+second:
 
-**The tests are short because the domain has no setup.** `test_core.py` needs no
-fixtures, no temporary directories and no mocks: every function takes a string
-and returns a value. The only fixture in the whole suite is `tmp_path` in the CLI
-tests, which is testing file handling — the thing the CLI is actually for.
+**A silent 1 ms click storm.** The interval was computed as
+`interval + uniform(-range, range) / 1000`, and a negative result was clamped
+to `0.001`. Nobody was told. A 50 ms rhythm with a 200 ms spread became a
+thousand clicks a second, and the only symptom was that it felt wrong.
+`ClickSettings.validate` now refuses that combination and names both numbers.
 
-**Benchmarking and profiling have a clean target.** `benchmarks/` calls the
-domain functions directly, so a measurement reflects the algorithm and not
-terminal rendering or window redraws.
+**A random offset that did nothing.** The scattered coordinate was computed
+every iteration, and `moveTo` was only called when "fixed position" was ticked.
+With the box unticked the offset was calculated and thrown away. It now applies
+to the cursor as well, which is what switching it on was asking for.
 
-## Data flow
+Neither is exotic. Both are arithmetic, and arithmetic buried in a Qt thread is
+arithmetic nobody reads.
 
-1. A shell obtains text — a file, standard input, or the GUI's text widget.
-2. `analyse_text(text)` tokenises once, counts once, and returns a frozen
-   `TextStats`.
-3. `top_words(stats, limit)` filters and ranks the counter that `TextStats`
-   already carries. It never re-reads the text.
+## What is in each layer
 
-Step 2 is the only pass over the input. This matters at scale: analysing then
-asking for the top 10, then the top 50, costs one tokenisation, not three.
+### `settings.py` - what a run is
 
-## Deliberate omissions
+Two shapes, deliberately not one.
 
-- **No plugin system.** Two shells do not justify an abstraction layer; adding
-  one now would be architecture for its own sake.
-- **No configuration file.** Every option is a CLI flag. A config file would
-  create a second source of truth for the same settings.
-- **No caching.** Analysis is linear and fast; a cache would add invalidation
-  bugs for no measurable gain. See `docs/quality-iso25010.md` §2.
-- **No streaming.** The whole text is held in memory, which caps usable input at
-  roughly a hundred megabytes. Streaming would complicate every function to
-  serve a case this tool does not have.
+`Preset` is the file on disk: every value a string, the mouse button and click
+type written in Russian, because that is what the interface shows and because
+preset files written by v1.0.0 must keep loading. A test reads
+`configs/Dota2Pudge.json` from this repository rather than a fixture, so
+compatibility is proven rather than assumed.
 
-## Where to add things
+`ClickSettings` is what the clicker runs on: floats, integers, enumerations,
+and a validator. It is frozen, so a run cannot change under the thread that is
+executing it.
 
-| To add | Put it |
+`preset_to_settings` is the border between them, and the only place below the
+user interface where a Russian label is allowed to appear. When it refuses, it
+names the field - somebody who was editing JSON in Notepad should not be shown
+`invalid literal for int() with base 10`.
+
+### `core.py` - what happens next
+
+Four functions and an estimate:
+
+| function | asked | per click |
+| --- | --- | --- |
+| `next_interval` | how long to sleep | yes |
+| `next_position` | where to click | yes |
+| `should_stop` | is the run finished | yes |
+| `estimate_run` | how long will this take | once |
+
+Every one takes a `random.Random` rather than calling the module-level
+functions. That is what makes the randomness testable: seed the generator and
+the sequence is the same every time, so a failing test is reproducible instead
+of appearing one run in fifty.
+
+### `gui.py` - the shell
+
+Qt widgets, the worker threads, the global hotkeys, the file dialogs. It holds
+the Russian labels, maps them through `settings.py`, and asks `core` what to do
+on every iteration. It decides nothing itself.
+
+## What was deliberately left out
+
+**No test drives the Qt window.** It would need a display, and on a Linux
+runner a virtual one, and `keyboard` wants root there to claim the hotkeys.
+What a widget test could check - that a checkbox flips a boolean - is not where
+the faults were. Coverage excludes `gui.py` and says so rather than quietly
+counting it.
+
+**No abstraction over pyautogui.** A `MouseDriver` protocol with a fake for
+tests would let `gui.py` be tested without a mouse. It would also add an
+indirection to a module whose entire job is four `pyautogui` calls in a row.
+When something in the shell becomes worth testing, that is the moment to add
+it, not before.
+
+**Settings are still passed as one frozen object.** Splitting them into a
+timing object and a targeting object would be tidier and would double the
+number of things to thread through the constructor. One object crosses the
+boundary; the boundary is one function call.
+
+**The preset format was not modernised.** Strings and Russian labels are
+awkward, and changing them would break every preset anybody has saved. The
+awkwardness is confined to `Preset`, and nothing above it has to care.
+
+## Where to put a change
+
+| change | where |
 | --- | --- |
-| A new statistic | `core.py`, plus tests in `test_core.py` |
-| A new output format | `cli.py`, next to the `--json` branch |
-| A new interface | a new module beside `cli.py`, calling `core` only |
-| A performance claim | `benchmarks/`, so it is measured rather than asserted |
+| timing, scatter, stopping, estimates | `core.py`, with a test |
+| a new setting, or a preset field | `settings.py`, with a round-trip test |
+| a widget, a dialog, a hotkey | `gui.py` |
+| anything you cannot test without a screen | `gui.py`, and ask why |
+
+Logic that reaches into `gui.py` cannot be tested and cannot be reused. That is
+the mistake this layout exists to make difficult.
