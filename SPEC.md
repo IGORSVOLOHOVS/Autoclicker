@@ -5,6 +5,28 @@
 строку, где оно реализовано, и на тест, который его проверяет, если такой есть.
 Сводка по проекту и инструкции по запуску — в [`docs/README.md`](docs/README.md).
 
+<!-- jira-sync:start -->
+Jira: KAN-147
+
+## Tasks
+
+This list is one ticket in Jira project KAN, [KAN-147](https://igorsvolohovs.atlassian.net/browse/KAN-147). Each line is a checkbox there: tick it in Jira and the sync ticks it here; add a checkbox there and it is appended here. Done items are the features described in section 3; open items are what the project declares but the code does not do yet.
+
+- [x] Настройки и их проверка (section 3.1) <!-- spec-675d65c086 -->
+- [x] Файл пресета (section 3.2) <!-- spec-38e0b8b602 -->
+- [x] Решения на каждом клике (section 3.3) <!-- spec-9e3e8078e4 -->
+- [x] Окно (section 3.4) <!-- spec-f5988fe08a -->
+- [x] Запуск и вспомогательные скрипты проекта (section 3.5) <!-- spec-793b2eb29f -->
+- [x] Известные расхождения кода с требованиями (section 3.6) <!-- spec-28fab7690e -->
+- [ ] `estimate_run`, `format_duration` (FR-17, FR-18) нигде в `src/` не вызываются; (declared, not implemented) <!-- spec-estimaterun-formatduration-fr-17-fr-18-src -->
+- [ ] Захват координат щелчком по окну: (declared, not implemented) <!-- spec-7028347edb -->
+- [ ] `hotkeys_to_string` и `self.key_inputs` не используются (`gui.py:190`, (declared, not implemented) <!-- spec-hotkeystostring-self-keyinputs-gui-py-190 -->
+- [ ] `README.md`: (declared, not implemented) <!-- spec-readme-md -->
+- [ ] `CHANGELOG.md` 1.1.0: (declared, not implemented) <!-- spec-changelog-md-1-1-0 -->
+- [ ] `pyproject.toml:15`: (declared, not implemented) <!-- spec-pyproject-toml-15 -->
+
+<!-- jira-sync:end -->
+
 ## 1. Назначение и границы
 
 Программа нажимает кнопку мыши с заданным интервалом и параметрами, управляется
